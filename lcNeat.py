@@ -1,5 +1,6 @@
 import csv
 import json
+import logging
 import math
 import MultiNEAT as NEAT
 import os
@@ -7,6 +8,13 @@ import random
 import shutil
 import sys
 import time
+
+def outputFilename(outputDir, prefix, timestamp, extension):
+  return '/'.join([outputDir, '.'.join([prefix, str(timestamp), extension])])
+
+def jsonDump(value, outputDir, prefix, timestamp):
+  with open(outputFilename(outputDir, prefix, timestamp, 'json'), 'w') as outFile:
+      json.dump(value, outFile, indent=4, sort_keys=True)
 
 def percentToFraction(percent):
   assert percent.endswith('%')
@@ -17,7 +25,7 @@ def percentToFraction(percent):
   assert result > 0 and result < 0.4
   return result
 
-def buildInputs(inputDir):
+def buildInputs(inputDir, logger):
   result = []
   valid_status = set(['Default', 'Fully Paid', 'Charged Off'])
   seen_status = set([])
@@ -42,9 +50,15 @@ def buildInputs(inputDir):
             validRows += 1
           else:
             invalidRows += 1
-      print(potentialFile + ' had ' + str(validRows) + ' valid rows, ' + str(invalidRows) + ' invalid rows.')
-  print('Status codes encountered: ' + str(seen_status))
-  return [result[i] for i in sorted(random.sample(xrange(len(result)),1000))]
+      logger.info(potentialFile + ' had ' + str(validRows) + ' valid rows, ' + str(invalidRows) + ' invalid rows.')
+  logger.info('Status codes encountered: ' + str(seen_status))
+  result = [result[i] for i in sorted(random.sample(xrange(len(result)),1000))]
+  winners = 0
+  for inst in result:
+    if inst[0]['loan_status'] == 'Fully Paid':
+      winners += 1
+  logger.info('Winners: ' + str(winners) + ' out of ' + str(len(result)))
+  return result
 
 def evaluate(genome, inputs):
   # this creates a neural network (phenotype) from the genome
@@ -66,8 +80,7 @@ def evaluate(genome, inputs):
         picks[1].append(inst)
   return (fitness, picks[0], picks[1])
 
-def runNeat(inputs, outputDir):
-  timestamp = time.time()
+def runNeat(inputs, outputDir, logger, timestamp):
   max_fitness = -50000
   max_fitness_genome = None
   max_winners = None
@@ -85,7 +98,7 @@ def runNeat(inputs, outputDir):
         fitness, winners, losers = evaluate(genome, inputs)
         genome.SetFitness(fitness)
         if fitness > max_fitness:
-          print('Found new champion with fitness ' + str(fitness) + ' that picked ' + str(len(winners)) + ' winners and ' + str(len(losers)) + ' losers.')
+          logger.debug('Found new champion with fitness ' + str(fitness) + ' that picked ' + str(len(winners)) + ' winners and ' + str(len(losers)) + ' losers.')
           max_fitness = fitness
           max_fitness_genome = genome
           max_winners = winners
@@ -97,17 +110,27 @@ def runNeat(inputs, outputDir):
 
     # advance to the next generation
     pop.Epoch()
-    print('Done with generation: ' + str(generation))
+    logger.info('Done with generation: ' + str(generation))
   max_fitness_genome.Save('/'.join([outputDir, '.'.join(['maxFitnessGenome', str(timestamp), 'ge'])]))
   copyScriptSource = os.path.abspath(__file__)
-  copyScriptDest = '/'.join([outputDir, '.'.join(['lcNeat', str(timestamp), 'py'])])
+  copyScriptDest = outputFilename(outputDir, 'lcNeat', timestamp, 'py')
   shutil.copyfile(copyScriptSource, copyScriptDest)
-  with open('/'.join([outputDir, '.'.join(['winners', str(timestamp), 'json'])]), 'w') as winnersFile:
-    json.dump(max_winners, winnersFile, indent=4, sort_keys=True)
-  with open('/'.join([outputDir, '.'.join(['losers', str(timestamp), 'json'])]), 'w') as losersFile:
-    json.dump(max_losers, losersFile, indent=4, sort_keys=True)
-  with open('/'.join([outputDir, '.'.join(['sample', str(timestamp), 'json'])]), 'w') as sampleFile:
-    json.dump(inputs, sampleFile, indent=4, sort_keys=True)
+  jsonDump(max_winners, outputDir, 'winners', timestamp)
+  jsonDump(max_losers, outputDir, 'losers', timestamp)
+  jsonDump(inputs, outputDir, 'sample', timestamp)
   
 if __name__ == '__main__':
-  runNeat(buildInputs('/home/bryan/Downloads/historical'), '/home/bryan/Downloads/historical/neat')
+  timestamp = time.time()
+  outputDir = '/home/bryan/Downloads/historical/neat'
+  logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
+  rootLogger = logging.getLogger()
+ 
+  fileHandler = logging.FileHandler(outputFilename(outputDir, 'output', timestamp, 'log'))
+  fileHandler.setFormatter(logFormatter)
+  rootLogger.addHandler(fileHandler)
+ 
+  consoleHandler = logging.StreamHandler()
+  consoleHandler.setFormatter(logFormatter)
+  rootLogger.addHandler(consoleHandler) 
+  rootLogger.setLevel(logging.DEBUG)
+  runNeat(buildInputs('/home/bryan/Downloads/historical', rootLogger), outputDir, rootLogger, timestamp)
