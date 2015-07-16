@@ -31,11 +31,14 @@ def buildInputs(inputDir):
         for row in csvReader:
           int_rate_raw = row['int_rate']
           loan_status = row['loan_status']
+          inq_last_6mths = row['inq_last_6mths']
           seen_status.add(loan_status)
-          if int_rate_raw and loan_status in valid_status:
+          if int_rate_raw and inq_last_6mths and loan_status in valid_status:
             int_rate = percentToFraction(int_rate_raw)
+            inq_last_6mths = int(inq_last_6mths)
             row['int_rate'] = int_rate
-            result.append((row, [int_rate]))
+            row['inq_last_6mths'] = inq_last_6mths
+            result.append((row, [int_rate, inq_last_6mths]))
             validRows += 1
           else:
             invalidRows += 1
@@ -65,10 +68,6 @@ def evaluate(genome, inputs):
 
 def runNeat(inputs, outputDir):
   timestamp = time.time()
-  copyScriptSource = os.path.abspath(__file__)
-  copyScriptDest = '/'.join([outputDir, '.'.join(['lcNeat', str(timestamp), 'py'])])
-  print('copying ' + str(copyScriptSource) + ' to ' + str(copyScriptDest))
-  shutil.copyfile(copyScriptSource, copyScriptDest)
   max_fitness = -50000
   max_fitness_genome = None
   max_winners = None
@@ -100,10 +99,15 @@ def runNeat(inputs, outputDir):
     pop.Epoch()
     print('Done with generation: ' + str(generation))
   max_fitness_genome.Save('/'.join([outputDir, '.'.join(['maxFitnessGenome', str(timestamp), 'ge'])]))
+  copyScriptSource = os.path.abspath(__file__)
+  copyScriptDest = '/'.join([outputDir, '.'.join(['lcNeat', str(timestamp), 'py'])])
+  shutil.copyfile(copyScriptSource, copyScriptDest)
   with open('/'.join([outputDir, '.'.join(['winners', str(timestamp), 'json'])]), 'w') as winnersFile:
     json.dump(max_winners, winnersFile, indent=4, sort_keys=True)
   with open('/'.join([outputDir, '.'.join(['losers', str(timestamp), 'json'])]), 'w') as losersFile:
     json.dump(max_losers, losersFile, indent=4, sort_keys=True)
+  with open('/'.join([outputDir, '.'.join(['sample', str(timestamp), 'json'])]), 'w') as sampleFile:
+    json.dump(inputs, sampleFile, indent=4, sort_keys=True)
   
 if __name__ == '__main__':
   runNeat(buildInputs('/home/bryan/Downloads/historical'), '/home/bryan/Downloads/historical/neat')
