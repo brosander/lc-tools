@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import argparse
 import csv
 import json
@@ -81,7 +83,7 @@ def evaluate(genome, inputs):
         picks[1].append(inst)
   return (fitness, picks[0], picks[1])
 
-def runNeat(inputs, outputDir, logger, timestamp):
+def runNeat(inputs, outputDir, logger, timestamp, generations):
   max_fitness = -50000
   max_fitness_genome = None
   max_winners = None
@@ -90,7 +92,7 @@ def runNeat(inputs, outputDir, logger, timestamp):
   genome = NEAT.Genome(0, len(inputs[0][1]), 0, 1, False, NEAT.ActivationFunction.UNSIGNED_SIGMOID, NEAT.ActivationFunction.UNSIGNED_SIGMOID, 0, params)     
   pop = NEAT.Population(genome, params, True, 1.0)
 
-  for generation in range(100): # run for 100 generations
+  for generation in range(generations): # run for 100 generations
     # retrieve a list of all genomes in the population
     genome_list = NEAT.GetGenomeList(pop)
 
@@ -112,7 +114,7 @@ def runNeat(inputs, outputDir, logger, timestamp):
     # advance to the next generation
     pop.Epoch()
     logger.info('Done with generation: ' + str(generation))
-  max_fitness_genome.Save('/'.join([outputDir, '.'.join(['maxFitnessGenome', str(timestamp), 'ge'])]))
+  max_fitness_genome.Save(outputFilename(outputDir, 'maxFitnessGenome', timestamp, 'ge'))
   copyScriptSource = os.path.abspath(__file__)
   copyScriptDest = outputFilename(outputDir, 'lcNeat', timestamp, 'py')
   shutil.copyfile(copyScriptSource, copyScriptDest)
@@ -129,6 +131,7 @@ if __name__ == '__main__':
   ''', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument("-i", "--inputDirectory", default=None, help="The input directory with the historical csvs")
   parser.add_argument("-o", "--outputDirectory", default=None, help="The output directory")
+  parser.add_argument("-g", "--generations", type=int, default=100, help="The number of generatios")
   args = parser.parse_args()
 
   if not args.inputDirectory:
@@ -149,4 +152,4 @@ if __name__ == '__main__':
   consoleHandler.setFormatter(logFormatter)
   rootLogger.addHandler(consoleHandler) 
   rootLogger.setLevel(logging.DEBUG)
-  runNeat(buildInputs(resolveDir(args.inputDirectory), rootLogger), outputDir, rootLogger, timestamp)
+  runNeat(buildInputs(resolveDir(args.inputDirectory), rootLogger), outputDir, rootLogger, timestamp, args.generations)
