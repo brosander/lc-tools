@@ -28,40 +28,48 @@ def percentToFraction(percent):
   assert result > 0 and result < 0.4
   return result
 
-def buildInputs(inputDir, logger):
-  result = []
-  valid_status = set(['Default', 'Fully Paid', 'Charged Off'])
-  seen_status = set([])
-  for potentialFile in os.listdir(inputDir):
-    if potentialFile.endswith('.csv'):
-      validRows = 0
-      invalidRows = 0
-      with open('/'.join([inputDir, potentialFile]), 'rb') as csvFile:
-        csvFile.readline()
-        csvReader = csv.DictReader(csvFile)
-        for row in csvReader:
-          int_rate_raw = row['int_rate']
-          loan_status = row['loan_status']
-          inq_last_6mths = row['inq_last_6mths']
-          seen_status.add(loan_status)
-          if int_rate_raw and inq_last_6mths and loan_status in valid_status:
-            int_rate = percentToFraction(int_rate_raw)
-            inq_last_6mths = int(inq_last_6mths)
-            row['int_rate'] = int_rate
-            row['inq_last_6mths'] = inq_last_6mths
-            result.append((row, [int_rate, inq_last_6mths]))
-            validRows += 1
-          else:
-            invalidRows += 1
-      logger.info(potentialFile + ' had ' + str(validRows) + ' valid rows, ' + str(invalidRows) + ' invalid rows.')
-  logger.info('Status codes encountered: ' + str(seen_status))
-  result = [result[i] for i in sorted(random.sample(xrange(len(result)),1000))]
-  winners = 0
-  for inst in result:
-    if inst[0]['loan_status'] == 'Fully Paid':
-      winners += 1
-  logger.info('Winners: ' + str(winners) + ' out of ' + str(len(result)))
-  return result
+class HistoricalData(object):
+  def __init__(self, inputDir, logger, percentTraining):
+    self.training = []
+    self.test = []
+    result = []
+    valid_status = set(['Default', 'Fully Paid', 'Charged Off'])
+    seen_status = set([])
+    for potentialFile in os.listdir(inputDir):
+      if potentialFile.endswith('.csv'):
+        validRows = 0
+        invalidRows = 0
+        with open('/'.join([inputDir, potentialFile]), 'rb') as csvFile:
+          csvFile.readline()
+          csvReader = csv.DictReader(csvFile)
+          for row in csvReader:
+            int_rate_raw = row['int_rate']
+            loan_status = row['loan_status']
+            inq_last_6mths = row['inq_last_6mths']
+            seen_status.add(loan_status)
+            if int_rate_raw and inq_last_6mths and loan_status in valid_status:
+              int_rate = percentToFraction(int_rate_raw)
+              inq_last_6mths = int(inq_last_6mths)
+              row['int_rate'] = int_rate
+              row['inq_last_6mths'] = inq_last_6mths
+              result.append((row, [int_rate, inq_last_6mths]))
+              validRows += 1
+            else:
+              invalidRows += 1
+        logger.info(potentialFile + ' had ' + str(validRows) + ' valid rows, ' + str(invalidRows) + ' invalid rows.')
+    logger.info('Status codes encountered: ' + str(seen_status))
+    resultLen = len(result)
+    trainingSet = set(random.sample(xrange(resultLen), int(resultLen * percentTraining)))
+    for index, elem in enumerate(result):
+      if index in trainingSet:
+        self.training.append(elem)
+      else:
+        self.test.append(elem)
+    winners = 0
+    for inst in self.training:
+      if inst[0]['loan_status'] == 'Fully Paid':
+        winners += 1
+    logger.info('Winners: ' + str(winners) + ' out of ' + str(len(self.training)))
 
 def evaluate(genome, inputs):
   # this creates a neural network (phenotype) from the genome
@@ -83,7 +91,8 @@ def evaluate(genome, inputs):
         picks[1].append(inst)
   return (fitness, picks[0], picks[1])
 
-def runNeat(inputs, outputDir, logger, timestamp, generations):
+def runNeat(historicalData, outputDir, logger, timestamp, generations):
+  inputs = historicalData.training
   max_fitness = -50000
   max_fitness_genome = None
   max_winners = None
@@ -114,6 +123,8 @@ def runNeat(inputs, outputDir, logger, timestamp, generations):
     # advance to the next generation
     pop.Epoch()
     logger.info('Done with generation: ' + str(generation))
+  fitness, winners, losers = evaluate(max_fitness_genome, historicalData.test)
+  logger.debug('Champion performance on test data: ' + str(fitness) + ' fitness picked ' + str(len(winners)) + ' winners and ' + str(len(losers)) + ' losers.')
   max_fitness_genome.Save(outputFilename(outputDir, 'maxFitnessGenome', timestamp, 'ge'))
   copyScriptSource = os.path.abspath(__file__)
   copyScriptDest = outputFilename(outputDir, 'lcNeat', timestamp, 'py')
@@ -121,6 +132,7 @@ def runNeat(inputs, outputDir, logger, timestamp, generations):
   jsonDump(max_winners, outputDir, 'winners', timestamp)
   jsonDump(max_losers, outputDir, 'losers', timestamp)
   jsonDump(inputs, outputDir, 'sample', timestamp)
+
   
 def resolveDir(directory):
   return os.path.abspath(os.path.expanduser(directory))
@@ -132,6 +144,7 @@ if __name__ == '__main__':
   parser.add_argument("-i", "--inputDirectory", default=None, help="The input directory with the historical csvs")
   parser.add_argument("-o", "--outputDirectory", default=None, help="The output directory")
   parser.add_argument("-g", "--generations", type=int, default=100, help="The number of generatios")
+  parser.add_argument("-t", "--training", type=int, default=70, help="The percent of data to be used for training (the rest will be used to test the winner)")
   args = parser.parse_args()
 
   if not args.inputDirectory:
@@ -152,4 +165,4 @@ if __name__ == '__main__':
   consoleHandler.setFormatter(logFormatter)
   rootLogger.addHandler(consoleHandler) 
   rootLogger.setLevel(logging.DEBUG)
-  runNeat(buildInputs(resolveDir(args.inputDirectory), rootLogger), outputDir, rootLogger, timestamp, args.generations)
+  runNeat(HistoricalData(resolveDir(args.inputDirectory), rootLogger, args.training / 100.0), outputDir, rootLogger, timestamp, args.generations)
