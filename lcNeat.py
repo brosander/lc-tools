@@ -7,6 +7,7 @@ import logging
 import math
 import MultiNEAT as NEAT
 import os
+import pickle
 import random
 import shutil
 import sys
@@ -128,7 +129,7 @@ def runNeat(historicalData, outputDir, logger, timestamp, generations, parameter
         if fitness > max_fitness:
           logger.debug('Found new champion with fitness ' + str(fitness) + ' that picked ' + str(len(winners)) + ' winners and ' + str(len(losers)) + ' losers.')
           max_fitness = fitness
-          max_fitness_genome = genome
+          max_fitness_genome = pickle.dumps(genome)
           max_winners = winners
           max_losers = losers
 
@@ -139,6 +140,7 @@ def runNeat(historicalData, outputDir, logger, timestamp, generations, parameter
     # advance to the next generation
     pop.Epoch()
     logger.info('Done with generation: ' + str(generation))
+  max_fitness_genome = pickle.loads(max_fitness_genome)
   fitness, winners, losers = evaluate(max_fitness_genome, historicalData.test)
   logger.debug('Champion performance on test data: ' + str(fitness) + ' fitness picked ' + str(len(winners)) + ' winners and ' + str(len(losers)) + ' losers.')
   max_fitness_genome.Save(outputFilename(outputDir, 'maxFitnessGenome', timestamp, 'ge'))
