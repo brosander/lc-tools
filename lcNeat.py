@@ -1,3 +1,4 @@
+import argparse
 import csv
 import json
 import logging
@@ -119,9 +120,24 @@ def runNeat(inputs, outputDir, logger, timestamp):
   jsonDump(max_losers, outputDir, 'losers', timestamp)
   jsonDump(inputs, outputDir, 'sample', timestamp)
   
+def resolveDir(directory):
+  return os.path.abspath(os.path.expanduser(directory))
+
 if __name__ == '__main__':
+  parser = argparse.ArgumentParser(description='''
+  This script is intended to run on the historical data from lending club
+  ''', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+  parser.add_argument("-i", "--inputDirectory", default=None, help="The input directory with the historical csvs")
+  parser.add_argument("-o", "--outputDirectory", default=None, help="The output directory")
+  args = parser.parse_args()
+
+  if not args.inputDirectory:
+    raise Exception('Must specify input directory')
+  if not args.outputDirectory:
+    raise Exception('Must specify output directory')
+
   timestamp = time.time()
-  outputDir = '/home/bryan/Downloads/historical/neat'
+  outputDir = resolveDir(args.outputDirectory)
   logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
   rootLogger = logging.getLogger()
  
@@ -133,4 +149,4 @@ if __name__ == '__main__':
   consoleHandler.setFormatter(logFormatter)
   rootLogger.addHandler(consoleHandler) 
   rootLogger.setLevel(logging.DEBUG)
-  runNeat(buildInputs('/home/bryan/Downloads/historical', rootLogger), outputDir, rootLogger, timestamp)
+  runNeat(buildInputs(resolveDir(args.inputDirectory), rootLogger), outputDir, rootLogger, timestamp)
