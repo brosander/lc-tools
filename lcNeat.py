@@ -91,13 +91,29 @@ def evaluate(genome, inputs):
         picks[1].append(inst)
   return (fitness, picks[0], picks[1])
 
-def runNeat(historicalData, outputDir, logger, timestamp, generations):
+trueStrings = set(['true', 'True', 'y', 'Y'])
+def setParam(params, key, value):
+  try:
+    setattr(params, key, value)
+  except:
+    try:
+      setattr(params, key, float(value))
+    except:
+      try:
+        setattr(params, key, int(value))
+      except:
+        setattr(params, key, value in trueStrings)
+
+def runNeat(historicalData, outputDir, logger, timestamp, generations, parameters):
   inputs = historicalData.training
   max_fitness = -50000
   max_fitness_genome = None
   max_winners = None
   max_losers = None
   params = NEAT.Parameters()  
+  for parameter in parameters:
+    key, value = parameter.split('=')
+    setParam(params, key, value)
   genome = NEAT.Genome(0, len(inputs[0][1]), 0, 1, False, NEAT.ActivationFunction.UNSIGNED_SIGMOID, NEAT.ActivationFunction.UNSIGNED_SIGMOID, 0, params)     
   pop = NEAT.Population(genome, params, True, 1.0)
 
@@ -145,12 +161,15 @@ if __name__ == '__main__':
   parser.add_argument("-o", "--outputDirectory", default=None, help="The output directory")
   parser.add_argument("-g", "--generations", type=int, default=100, help="The number of generatios")
   parser.add_argument("-t", "--training", type=int, default=70, help="The percent of data to be used for training (the rest will be used to test the winner)")
+  parser.add_argument("-p", "--parameter", action='append')
   args = parser.parse_args()
 
   if not args.inputDirectory:
     raise Exception('Must specify input directory')
   if not args.outputDirectory:
     raise Exception('Must specify output directory')
+  if not args.parameter:
+    args.parameter = []
 
   timestamp = time.time()
   outputDir = resolveDir(args.outputDirectory)
@@ -165,4 +184,4 @@ if __name__ == '__main__':
   consoleHandler.setFormatter(logFormatter)
   rootLogger.addHandler(consoleHandler) 
   rootLogger.setLevel(logging.DEBUG)
-  runNeat(HistoricalData(resolveDir(args.inputDirectory), rootLogger, args.training / 100.0), outputDir, rootLogger, timestamp, args.generations)
+  runNeat(HistoricalData(resolveDir(args.inputDirectory), rootLogger, args.training / 100.0), outputDir, rootLogger, timestamp, args.generations, args.parameter)
